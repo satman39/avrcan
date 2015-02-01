@@ -10,27 +10,36 @@
  *  Author: AVR Tutorials
  *  Website: www.AVR-Tutorials.com
 */
-#define F_CPU 8000000UL 
+#define F_CPU 16000000UL 
 
 #include <avr/io.h>
 #include <avr/interrupt.h>  
 #include <util/delay.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <util/atomic.h>
+//#include <stdio.h>
+#include <string.h>
+
 
 #define processor AT90CAN128
-#define OSCSPEED	8000000		/* in Hz */
+#define OSCSPEED	16000000		/* in Hz */
+#define ts_port		PORTA
+#define ts_DDR		DDRA
 #define DataPort	PORTC	// Using PortC as our Dataport
 #define DataDDR		DDRC
 #define encoder		PORTD  //portD  0,1 are encoder ab
 #define CHA PD0
 #define CHB PD1
-volatile long enc_count = 63;
-
-
+volatile  uint32_t enc_count = 0;
+	volatile long loop = 0;
+const char lf = 10;
+const char cr = 13;
 
 void PORT_Init()
 {
-	PORTA = 0b00000000;
-	DDRA = 0b00000000;
+	//PORTA = 0b00000000;
+	//DDRA = 0b11111111;
 
 	PORTB = 0b00000000;
 	DDRB = 0b00000000;
@@ -49,15 +58,20 @@ void PORT_Init()
 }
 ISR(INT0_vect)
 {
-	static int8_t lookup_table[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
-	static uint8_t enc_val = 0;
-	enc_val = enc_val <<2;
+	static signed short lookup_table[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
+	static unsigned char enc_val = 0;
+	enc_val = enc_val <<2;	 
 	enc_val = enc_val | (PIND & 0b0011) ;
+	//ts_port = (enc_val & 0b1111);
 	enc_count = enc_count + lookup_table[enc_val & 0b1111];
+	//DataPort = (enc_count &0xFF);
+	 //if (PIND & 0b0001) enc_count++;
+	ts_port = lookup_table[enc_val & 0b1111]; 
 }
 ISR(INT1_vect)
 {
-	//ISR(INT0_vect);
+	//if (PIND & 0b0010) enc_count--;
+	ISR(INT0_vect);
 }
 
 
@@ -78,7 +92,8 @@ ISR(INT6_vect)
 		DataPort = 0xFF;
 		_delay_ms(500);	// Wait 5 seconds
 	}
-	
+		
+
 	DataPort = temp;	//Restore old value to DataPort
 }
 
@@ -128,7 +143,9 @@ int main(void)
 	PORTE = 1<< PE6;		// Enable PE6 pull-up resistor
 	PORT_Init();
 	DataDDR = 0xFF;		// Configure Dataport as output
-	DataPort = 0x01;	// Initialise Dataport to 1
+	DataPort = 0x01;
+	ts_DDR = 0xFF;
+	ts_port = 0x01;	// Initialise Dataport to 1
 
 	EIFR  = 1 << INTF6 | 1 << INTF0 | 1<< INTF1 ;					// Enable INT6,int 0, int1
 	
@@ -136,29 +153,43 @@ int main(void)
 	EICRA = 1 << ISC00 | 0 << ISC01 | 1 << ISC10 | 0 << ISC11 ;
 	EIMSK = 1 << INT6  | 1 << INT0  | 1 << INT1 ;
 	sei();				//Enable Global Interrupt
-	unsigned char Ch;
+	//unsigned char Ch;
 	WDT_Off();
-	
+	int ctr ;
 	UART_Init(9600);
-	// enc_count = 255;
+	char txchar [13] = "000000000000";
+
+	
     while(1)
     {
-		DataPort = !(enc_count & 0xFF) ;  // encoder display
-		
-	//	if(DataPort >= 0x80)
-	//		DataPort = 1;
-	//	else
-	//		DataPort = DataPort << 1;	// Shift to the left
- 
-		_delay_ms(5);	// Wait .05 seconds
-		
-		asm("WDR");				//avoiding reset of the program
-		
-		Ch = UART_Receive();	//receiving char
-		if (Ch)
 		{
-			UART_Transmit(Ch);	//returning char
+		ATOMIC_BLOCK(ATOMIC_FORCEON);
+		
+		DataPort = (enc_count & 0xFF) ;  // encoder display	
+		}	
+		
+		ultoa(enc_count,txchar,10);
+		for (ctr =0;ctr <(strlen(txchar)); ctr ++)
+		{
+		UART_Transmit(txchar[ctr]);	
+		
 		}
+		UART_Transmit(lf);
+		UART_Transmit(cr);
+		//if(ts_port >= 0x80)
+		//	ts_port = 1;
+		//else
+		//	ts_port = ts_port << 1;	// Shift to the left
+ 
+		//_delay_ms(50);	// Wait .05 seconds
+		
+		//asm("WDR");				//avoiding reset of the program
+		
+		//Ch = UART_Receive();	//receiving char
+		//if (Ch)
+		//{
+		//	UART_Transmit(Ch);	//returning char
+		//}
     }
 
 	
