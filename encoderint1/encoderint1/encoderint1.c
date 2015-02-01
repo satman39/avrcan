@@ -31,10 +31,15 @@
 #define encoder		PORTD  //portD  0,1 are encoder ab
 #define CHA PD0
 #define CHB PD1
-volatile  uint32_t enc_count = 0;
-	volatile long loop = 0;
+volatile  int32_t enc_count = 0;
+volatile long loop = 0;
+volatile uint32_t a =0;
+volatile uint32_t b =0;
 const char lf = 10;
 const char cr = 13;
+const char sp = 32;
+const int8_t lookup_table[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
+volatile uint8_t enc_val = 0;
 
 void PORT_Init()
 {
@@ -58,20 +63,28 @@ void PORT_Init()
 }
 ISR(INT0_vect)
 {
-	static signed short lookup_table[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
-	static unsigned char enc_val = 0;
+	//ts_port = ts_port | 0b00000001 ;
+	
 	enc_val = enc_val <<2;	 
 	enc_val = enc_val | (PIND & 0b0011) ;
 	//ts_port = (enc_val & 0b1111);
 	enc_count = enc_count + lookup_table[enc_val & 0b1111];
 	//DataPort = (enc_count &0xFF);
 	 //if (PIND & 0b0001) enc_count++;
-	ts_port = lookup_table[enc_val & 0b1111]; 
+	//ts_port ;
+	//a+= 1;
+	//ts_port = ts_port & 0b11111110 ;
+	
 }
 ISR(INT1_vect)
 {
+	//ts_port = ts_port | 0b00000010 ;
 	//if (PIND & 0b0010) enc_count--;
-	ISR(INT0_vect);
+	//b+= 1;
+	enc_val = enc_val <<2;	 
+	enc_val = enc_val | (PIND & 0b0011) ;
+	enc_count = enc_count + lookup_table[enc_val & 0b1111];
+	//ts_port = ts_port & 0b11111101 ;
 }
 
 
@@ -145,7 +158,7 @@ int main(void)
 	DataDDR = 0xFF;		// Configure Dataport as output
 	DataPort = 0x01;
 	ts_DDR = 0xFF;
-	ts_port = 0x01;	// Initialise Dataport to 1
+	ts_port = 0x00;	// Initialise Dataport to 0
 
 	EIFR  = 1 << INTF6 | 1 << INTF0 | 1<< INTF1 ;					// Enable INT6,int 0, int1
 	
@@ -168,14 +181,32 @@ int main(void)
 		DataPort = (enc_count & 0xFF) ;  // encoder display	
 		}	
 		
-		ultoa(enc_count,txchar,10);
+		ltoa(enc_count,txchar,10);
 		for (ctr =0;ctr <(strlen(txchar)); ctr ++)
 		{
 		UART_Transmit(txchar[ctr]);	
 		
 		}
-		UART_Transmit(lf);
+		
 		UART_Transmit(cr);
+		UART_Transmit(lf);
+		ultoa(a,txchar,10);
+		for (ctr =0;ctr < (strlen(txchar)); ctr ++)
+		{
+			UART_Transmit(txchar[ctr]);
+		}
+		for (ctr =0; ctr<10;ctr++)
+		{
+			UART_Transmit(sp);
+		}
+		
+		ultoa(b,txchar,10);
+		for (ctr =0;ctr < (strlen(txchar)); ctr ++)
+		{
+			UART_Transmit(txchar[ctr]);
+		}
+		UART_Transmit(cr);
+		UART_Transmit(lf);
 		//if(ts_port >= 0x80)
 		//	ts_port = 1;
 		//else
